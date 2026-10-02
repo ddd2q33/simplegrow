@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, FileBarChart, FileSpreadsheet, Loader2, Plus, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -11,11 +11,15 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { deleteReport, generateReport } from "@/services/reports";
+import { deleteReport, generateReport, getReports } from "@/services/reports";
 import type { GenerateReportInput } from "@/services/reports";
 import { formatDate, formatFileSize, formatRelativeTime } from "@/lib/utils";
 import { FIXTURE_NOW } from "@/lib/mock/core";
-import type { Report } from "@/lib/types";
+import { accountGroups, accountsInScope, getAccount, socialAccounts } from "@/lib/mock/accounts";
+import { useDashboardFilters } from "@/components/dashboard/filters";
+import { ScopeBanner } from "@/components/dashboard/scope-banner";
+import { ALL_ACCOUNTS } from "@/lib/types";
+import type { AccountId, Report, SocialAccount } from "@/lib/types";
 
 const FORMAT_ICON: Record<Report["format"], LucideIcon> = {
   pdf: FileBarChart,
@@ -26,18 +30,38 @@ const FORMAT_ICON: Record<Report["format"], LucideIcon> = {
 const SECTIONS = [
   "Executive summary",
   "Platform breakdown",
+  "Account breakdown",
   "Top content",
   "Audience shift",
   "Recommendations",
 ];
 
 export function ReportsView({ initial }: { initial: Report[] }) {
+  const { scope } = useDashboardFilters();
   const [reports, setReports] = useState(initial);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const ready = reports.filter((report) => report.status === "ready");
+  const scopedAccounts = socialAccounts.filter(
+    (account) =>
+      account.connected &&
+      (scope.accountId === ALL_ACCOUNTS || account.id === scope.accountId) &&
+      (scope.platform === "all" || account.platform === scope.platform),
+  );
+
+  // The page ships with a default-scope payload; refetch whenever the
+  // global scope narrows or widens so the table always matches the banner.
+  useEffect(() => {
+    let active = true;
+    getReports(scope).then((rows) => {
+      if (active) setReports(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [scope]);
 
   async function onCreate(input: GenerateReportInput) {
     const created = await generateReport(input);
@@ -71,6 +95,15 @@ export function ReportsView({ initial }: { initial: Report[] }) {
         }
       />
 
+      <ScopeBanner
+        scope={scope}
+        accountCount={scopedAccounts.length}
+        totalFollowers={accountsInScope(scope).reduce(
+          (sum, account) => sum + account.followers,
+          0,
+        )}
+      />
+
       <div className="grid gap-4 sm:grid-cols-3">
         <Tile label="Reports" value={String(reports.length)} />
         <Tile label="Ready to download" value={String(ready.length)} />
@@ -99,6 +132,7 @@ export function ReportsView({ initial }: { initial: Report[] }) {
             <THead>
               <TR>
                 <TH>Report</TH>
+                <TH>Scope</TH>
                 <TH>Period</TH>
                 <TH>Format</TH>
                 <TH className="text-right">Size</TH>
@@ -122,6 +156,13 @@ export function ReportsView({ initial }: { initial: Report[] }) {
                           </p>
                         </div>
                       </div>
+                    </TD>
+                    <TD>
+                      <span className="text-[11px] text-muted-foreground">
+                        {report.accountId
+                          ? (getAccount(report.accountId)?.handle ?? "—")
+                          : "Workspace-wide"}
+                      </span>
                     </TD>
                     <TD className="text-xs text-muted-foreground">
                       {formatDate(report.periodStart)} — {formatDate(report.periodEnd)}
@@ -181,6 +222,8 @@ export function ReportsView({ initial }: { initial: Report[] }) {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreate={onCreate}
+        accounts={scopedAccounts}
+        defaultAccountId={scope.accountId}
       />
     </div>
   );
@@ -190,17 +233,22 @@ function GenerateReportDialog({
   open,
   onClose,
   onCreate,
+  accounts,
+  defaultAccountId,
 }: {
   open: boolean;
   onClose: () => void;
   onCreate: (input: GenerateReportInput) => Promise<void>;
+  accounts: SocialAccount[];
+  defaultAccountId: AccountId | typeof ALL_ACCOUNTS;
 }) {
   const [form, setForm] = useState<GenerateReportInput>({
+    accountId: defaultAccountId,
     name: "September 2026 — Monthly performance",
     periodStart: "2026-09-01",
     periodEnd: "2026-09-30",
     format: "pdf",
-    sections: ["Executive summary", "Platform breakdown", "Top content"],
+    sections: ["Executive summary", "Platform breakdown", "Account breakdown", "Top content"],
   });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -265,6 +313,30 @@ function GenerateReportDialog({
       }
     >
       <form id="report-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
+        <Field label="Scope">
+          <Select
+            value={form.accountId}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, accountId: event.target.value }))
+            }
+          >
+            <option value={ALL_ACCOUNTS}>Entire workspace</option>
+            {accountGroups.map((group) => {
+              const members = accounts.filter((account) => account.groupId === group.id);
+              if (members.length === 0) return null;
+              return (
+                <optgroup key={group.id} label={group.name}>
+                  {members.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.handle}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </Select>
+        </Field>
+
         <Field label="Report name">
           <Input
             value={form.name}
@@ -274,7 +346,7 @@ function GenerateReportDialog({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="From">
             <Input
               type="date"

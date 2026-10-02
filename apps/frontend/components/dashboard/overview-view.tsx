@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, RefreshCw, TriangleAlert } from "lucide-react";
-import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { RangePicker } from "@/components/dashboard/filters";
 import { KpiCard, DeltaBadge } from "@/components/dashboard/kpi-card";
 import { InsightCard } from "@/components/dashboard/insight-card";
@@ -11,29 +11,49 @@ import { ChartFrame } from "@/components/charts/chart-frame";
 import { TrendAreaChart } from "@/components/charts/trend-area-chart";
 import { ComparisonBarChart } from "@/components/charts/comparison-bar-chart";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TBody, TD, TH, THead, TR, Table } from "@/components/ui/table";
-import { useRangeData } from "@/hooks/use-range-data";
+import { useScopedData } from "@/hooks/use-scoped-data";
+import { ScopeBanner } from "@/components/dashboard/scope-banner";
+import { AccountBreakdownTable } from "@/components/dashboard/account-breakdown-table";
 import { getOverview } from "@/services/analytics";
 import { downloadCsv } from "@/lib/export";
+import { getAccount } from "@/lib/mock/accounts";
 import { formatCompact, formatPercent, formatShortDate } from "@/lib/utils";
-import type { DashboardOverview } from "@/lib/types";
+import type { DashboardOverview, DataScope } from "@/lib/types";
 
-export function OverviewView({ initial }: { initial: DashboardOverview }) {
-  const { data, loading, error } = useRangeData(getOverview, initial);
+export function OverviewView({
+  initial,
+  initialScope,
+}: {
+  initial: DashboardOverview;
+  initialScope: DataScope;
+}) {
+  const { data, loading, error, scope } = useScopedData(
+    getOverview,
+    initial,
+    initialScope,
+  );
   const dimmed = loading ? "opacity-60 transition-opacity" : "";
+
+  const totalFollowers = data.kpis.find((kpi) => kpi.key === "followers")?.value ?? 0;
+  const accountById = new Map(
+    data.accountBreakdown.map((row) => [row.accountId, row]),
+  );
 
   function exportOverview() {
     downloadCsv(
-      `simplegrow-overview-${data.range}.csv`,
-      data.reachByPlatform.map((row) => ({
+      `simplegrow-accounts-${data.range}.csv`,
+      data.accountBreakdown.map((row) => ({
+        account: row.handle,
         platform: row.platform,
         followers: row.followers,
         followers_change_pct: row.followersChangePct,
         reach: row.reach,
+        impressions: row.impressions,
         engagement_rate: row.engagementRate,
         reach_share_pct: row.sharePct,
       })),
@@ -62,6 +82,12 @@ export function OverviewView({ initial }: { initial: DashboardOverview }) {
           {error}
         </Card>
       ) : null}
+
+      <ScopeBanner
+        scope={scope}
+        accountCount={data.accountCount}
+        totalFollowers={totalFollowers}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {data.kpis.map((kpi) => (
@@ -128,79 +154,94 @@ export function OverviewView({ initial }: { initial: DashboardOverview }) {
         </ChartFrame>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <ChartFrame
-          className="lg:col-span-3"
-          title="Reach by platform"
-          description="Share of total reach in the selected period"
-        >
-          <ComparisonBarChart
-            layout="vertical"
-            data={data.reachByPlatform.map((row, index) => ({
-              label: row.platform,
-              value: row.reach,
-              color: `var(--chart-${(index % 5) + 1})`,
-            }))}
-          />
-        </ChartFrame>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="overflow-hidden lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Reach by platform</CardTitle>
+            <CardDescription>Share of total reach in the selected period</CardDescription>
+          </CardHeader>
+          <div className="p-5 pt-0">
+            <ComparisonBarChart
+              layout="vertical"
+              data={data.reachByPlatform.map((row, index) => ({
+                label: row.platform,
+                value: row.reach,
+                color: `var(--chart-${(index % 5) + 1})`,
+              }))}
+            />
+          </div>
+        </Card>
 
         <Card className="p-5 lg:col-span-2">
-          <SectionHeader title="Top content" description="Ranked by reach" />
+          <CardHeader>
+            <CardTitle>Top content</CardTitle>
+            <CardDescription>Ranked by reach</CardDescription>
+          </CardHeader>
           {data.topContent.length === 0 ? (
             <EmptyState title="No published content yet" />
           ) : (
             <ul className="mt-4 flex flex-col gap-3">
-              {data.topContent.map((item) => (
-                <li key={item.id} className="flex items-start gap-3">
-                  <PlatformBadge platform={item.platform} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium">{item.title}</p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {formatCompact(item.metrics.reach)} reach ·{" "}
-                      {formatPercent(item.metrics.engagementRate, 2)} engagement
-                    </p>
-                  </div>
-                  <Badge variant="secondary" size="sm">
-                    {item.aiScore.toFixed(1)}
-                  </Badge>
-                </li>
-              ))}
+              {data.topContent.map((item) => {
+                const account = accountById.get(item.accountId);
+                return (
+                  <li key={item.id} className="flex items-start gap-3">
+                    <PlatformBadge platform={item.platform} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium">{item.title}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {account?.handle ?? "—"} ·{" "}
+                        {formatCompact(item.metrics.reach)} reach ·{" "}
+                        {formatPercent(item.metrics.engagementRate, 2)} engagement
+                      </p>
+                    </div>
+                    <Badge variant="secondary" size="sm">
+                      {item.aiScore.toFixed(1)}
+                    </Badge>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
       </div>
 
       <div className="flex flex-col gap-4">
-        <SectionHeader
-          title="AI recommendations"
-          description="Ranked by estimated impact on reach"
-        />
-        <div className="grid gap-4 lg:grid-cols-2">
-          {data.recommendations.map((recommendation) => (
-            <RecommendationCard
-              key={recommendation.id}
-              recommendation={recommendation}
-            />
-          ))}
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>AI recommendations</CardTitle>
+            <CardDescription>Ranked by estimated impact on reach</CardDescription>
+          </CardHeader>
+          <div className="p-5 pt-0">
+            <div className="grid gap-4 lg:grid-cols-2">
+              {data.recommendations.map((recommendation) => (
+                <RecommendationCard
+                  key={recommendation.id}
+                  recommendation={recommendation}
+                />
+              ))}
+            </div>
+          </div>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="flex flex-col gap-4">
-          <SectionHeader title="Recent insights" description="From the analysis engine" />
-          {data.recentInsights.map((insight) => (
-            <InsightCard key={insight.id} insight={insight} />
-          ))}
-        </div>
+        <Card className="flex flex-col gap-4 p-5">
+          <CardHeader className="!p-0 !pb-0">
+            <CardTitle>Recent insights</CardTitle>
+            <CardDescription>From the analysis engine</CardDescription>
+          </CardHeader>
+          <div className="grid gap-4">
+            {data.recentInsights.map((insight) => (
+              <InsightCard key={insight.id} insight={insight} />
+            ))}
+          </div>
+        </Card>
 
         <Card className="overflow-hidden">
-          <div className="border-b border-border p-5 pb-4">
-            <SectionHeader
-              title="Running experiments"
-              description={`${data.activeExperiments.length} active`}
-            />
-          </div>
-
+          <CardHeader className="!p-0 !pb-0">
+            <CardTitle>Running experiments</CardTitle>
+            <CardDescription>{data.activeExperiments.length} active</CardDescription>
+          </CardHeader>
           {data.activeExperiments.length === 0 ? (
             <EmptyState
               title="No experiments running"
@@ -240,7 +281,8 @@ export function OverviewView({ initial }: { initial: DashboardOverview }) {
                     </div>
 
                     <p className="mt-3 text-[11px] text-muted-foreground">
-                      Primary metric: {experiment.primaryMetric} · started{" "}
+                      {getAccount(experiment.accountId)?.handle ?? "—"} · Primary metric:{" "}
+                      {experiment.primaryMetric} · started{" "}
                       {formatShortDate(experiment.startedAt)}
                     </p>
                   </li>
@@ -251,10 +293,13 @@ export function OverviewView({ initial }: { initial: DashboardOverview }) {
         </Card>
       </div>
 
+      <AccountBreakdownTable rows={data.accountBreakdown} />
+
       <Card className="overflow-hidden">
-        <div className="border-b border-border p-5 pb-4">
-          <SectionHeader title="Platform performance" description="All connected channels" />
-        </div>
+        <CardHeader className="!p-0 !pb-0">
+          <CardTitle>Platform performance</CardTitle>
+          <CardDescription>All connected channels</CardDescription>
+        </CardHeader>
         <Table>
           <THead>
             <TR>

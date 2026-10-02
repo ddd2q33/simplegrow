@@ -1,6 +1,7 @@
-import type { Report } from "@/lib/types";
+import type { AccountId, DataScope, Report } from "@/lib/types";
+import { ALL_ACCOUNTS } from "@/lib/types";
 import { mutate, query } from "@/lib/api";
-import { reports as seedReports } from "@/lib/mock/experiments";
+import { reports as seedReports, reportsInScope } from "@/lib/mock/experiments";
 
 let store: Report[] | null = null;
 
@@ -9,11 +10,22 @@ function reports(): Report[] {
   return store;
 }
 
-export function getReports() {
-  return query<Report[]>("/reports", () => reports());
+function scopeParams(scope: DataScope): string {
+  const params = new URLSearchParams({ range: scope.range });
+  if (scope.accountId !== ALL_ACCOUNTS) params.set("account_id", scope.accountId);
+  if (scope.platform !== "all") params.set("platform", scope.platform);
+  return params.toString();
+}
+
+export function getReports(scope: DataScope) {
+  return query<Report[]>(`/reports?${scopeParams(scope)}`, () => {
+    const visible = new Set(reportsInScope(scope).map((item) => item.id));
+    return reports().filter((item) => visible.has(item.id));
+  });
 }
 
 export interface GenerateReportInput {
+  accountId: AccountId | typeof ALL_ACCOUNTS;
   name: string;
   periodStart: string;
   periodEnd: string;
@@ -28,6 +40,7 @@ export function generateReport(input: GenerateReportInput) {
     () => {
       const report: Report = {
         id: `rpt_${Math.random().toString(36).slice(2, 8)}`,
+        accountId: input.accountId === ALL_ACCOUNTS ? null : input.accountId,
         name: input.name,
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,

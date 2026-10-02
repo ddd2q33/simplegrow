@@ -1,9 +1,11 @@
-import type { Experiment, Report } from "@/lib/types";
+import type { DataScope, Experiment, Report } from "@/lib/types";
+import { ALL_ACCOUNTS } from "@/lib/types";
 import { daysAgo } from "./core";
 
 export const experiments: Experiment[] = [
   {
     id: "exp_001",
+    accountId: "acc_ig_main",
     name: "Question hook vs statement hook",
     hypothesis:
       "Reels that open with a question in frame one will hold more viewers past the three-second mark than statement openings.",
@@ -37,6 +39,7 @@ export const experiments: Experiment[] = [
   },
   {
     id: "exp_002",
+    accountId: "acc_ig_main",
     name: "Carousel length: 6 slides vs 10 slides",
     hypothesis:
       "Longer carousels will increase completion rate without reducing save rate.",
@@ -70,9 +73,10 @@ export const experiments: Experiment[] = [
   },
   {
     id: "exp_003",
+    accountId: "acc_tt_main",
     name: "Posting time: 11:00 vs 20:30",
     hypothesis:
-      "Evening posts will outperform morning posts on reach for the TikTok account.",
+      "Evening posts will outperform morning posts on reach for the main TikTok account.",
     platform: "tiktok",
     status: "completed",
     primaryMetric: "Reach per post",
@@ -103,6 +107,7 @@ export const experiments: Experiment[] = [
   },
   {
     id: "exp_004",
+    accountId: "acc_yt_main",
     name: "Thumbnail face vs no face",
     hypothesis:
       "Faces in thumbnails will raise click-through rate on long-form YouTube.",
@@ -135,8 +140,9 @@ export const experiments: Experiment[] = [
   },
   {
     id: "exp_005",
+    accountId: "acc_tt_latam",
     name: "Caption length: short vs long",
-    hypothesis: "Longer captions will increase comment volume on TikTok.",
+    hypothesis: "Longer captions will increase comment volume on LatAm TikTok.",
     platform: "tiktok",
     status: "paused",
     primaryMetric: "Comments per 1K views",
@@ -165,11 +171,80 @@ export const experiments: Experiment[] = [
     aiVerdict:
       "Paused by an editor. Direction favours short captions, but the variant split needs more impressions before a call.",
   },
+  {
+    id: "exp_006",
+    accountId: "acc_ig_latam",
+    name: "Spanish originals vs dubbed main-brand footage",
+    hypothesis:
+      "Spanish-language originals will reach more LatAm viewers than dubbed versions of the same main-brand video.",
+    platform: "tiktok",
+    status: "running",
+    primaryMetric: "Reach per post",
+    confidence: 78,
+    startedAt: daysAgo(12),
+    endedAt: null,
+    winnerVariantId: null,
+    variants: [
+      {
+        id: "var_a",
+        name: "Spanish original",
+        trafficPct: 50,
+        impressions: 214600,
+        conversions: 128400,
+        rate: 59.8,
+      },
+      {
+        id: "var_b",
+        name: "Dubbed from EN",
+        trafficPct: 50,
+        impressions: 209800,
+        conversions: 89100,
+        rate: 42.5,
+      },
+    ],
+    aiVerdict:
+      "Originals lead by a consistent 17 points across nine matched pairs. Trend is stable, collect four more days to call it.",
+  },
+  {
+    id: "exp_007",
+    accountId: "acc_ig_verde",
+    name: "Menu post time: 07:30 vs 10:30",
+    hypothesis:
+      "Publishing the weekly menu before the morning commute will beat the current 10:30 slot on click-through rate.",
+    platform: "instagram",
+    status: "completed",
+    primaryMetric: "Link click-through rate",
+    confidence: 94,
+    startedAt: daysAgo(24),
+    endedAt: daysAgo(7),
+    winnerVariantId: "var_a",
+    variants: [
+      {
+        id: "var_a",
+        name: "07:30",
+        trafficPct: 50,
+        impressions: 41200,
+        conversions: 5140,
+        rate: 12.48,
+      },
+      {
+        id: "var_b",
+        name: "10:30",
+        trafficPct: 50,
+        impressions: 40880,
+        conversions: 4210,
+        rate: 10.3,
+      },
+    ],
+    aiVerdict:
+      "Confirmed over eight matched weeks. The morning window holds for this audience; schedule permanently at 07:30.",
+  },
 ];
 
 export const reports: Report[] = [
   {
     id: "rpt_008",
+    accountId: null,
     name: "August 2026 — Monthly performance",
     periodStart: "2026-08-01",
     periodEnd: "2026-08-31",
@@ -178,10 +253,18 @@ export const reports: Report[] = [
     createdAt: daysAgo(28),
     sizeBytes: 2516582,
     downloadUrl: "/api/reports/rpt_008/download",
-    sections: ["Executive summary", "Platform breakdown", "Top content", "Audience shift", "Recommendations"],
+    sections: [
+      "Executive summary",
+      "Platform breakdown",
+      "Account breakdown",
+      "Top content",
+      "Audience shift",
+      "Recommendations",
+    ],
   },
   {
     id: "rpt_007",
+    accountId: null,
     name: "Q2 2026 — Quarterly review",
     periodStart: "2026-04-01",
     periodEnd: "2026-06-30",
@@ -190,10 +273,17 @@ export const reports: Report[] = [
     createdAt: daysAgo(60),
     sizeBytes: 4194304,
     downloadUrl: "/api/reports/rpt_007/download",
-    sections: ["Executive summary", "Quarter over quarter", "Channel attribution", "Experiment log"],
+    sections: [
+      "Executive summary",
+      "Quarter over quarter",
+      "Channel attribution",
+      "Group performance",
+      "Experiment log",
+    ],
   },
   {
     id: "rpt_006",
+    accountId: null,
     name: "Content leaderboard — last 90 days",
     periodStart: "2026-06-30",
     periodEnd: "2026-09-28",
@@ -206,6 +296,7 @@ export const reports: Report[] = [
   },
   {
     id: "rpt_005",
+    accountId: null,
     name: "September 2026 — Monthly performance",
     periodStart: "2026-09-01",
     periodEnd: "2026-09-30",
@@ -214,10 +305,11 @@ export const reports: Report[] = [
     createdAt: daysAgo(0, -1),
     sizeBytes: 0,
     downloadUrl: null,
-    sections: ["Executive summary", "Platform breakdown", "Top content"],
+    sections: ["Executive summary", "Platform breakdown", "Account breakdown", "Top content"],
   },
   {
     id: "rpt_004",
+    accountId: null,
     name: "Audience demographics export",
     periodStart: "2026-08-01",
     periodEnd: "2026-08-31",
@@ -228,4 +320,54 @@ export const reports: Report[] = [
     downloadUrl: "/api/reports/rpt_004/download",
     sections: ["Segments", "Demographics", "Activity heatmap"],
   },
+  {
+    id: "rpt_003",
+    accountId: "acc_tt_latam",
+    name: "LatAm TikTok — August deep dive",
+    periodStart: "2026-08-01",
+    periodEnd: "2026-08-31",
+    format: "pdf",
+    status: "ready",
+    createdAt: daysAgo(27),
+    sizeBytes: 1872431,
+    downloadUrl: "/api/reports/rpt_003/download",
+    sections: ["Executive summary", "Hook analysis", "Best posting windows"],
+  },
+  {
+    id: "rpt_002",
+    accountId: "acc_ig_verde",
+    name: "Verde Café — Q3 client review",
+    periodStart: "2026-07-01",
+    periodEnd: "2026-09-30",
+    format: "pdf",
+    status: "ready",
+    createdAt: daysAgo(19),
+    sizeBytes: 3145728,
+    downloadUrl: "/api/reports/rpt_002/download",
+    sections: [
+      "Executive summary",
+      "Channel performance",
+      "Local audience",
+      "Content recommendations",
+    ],
+  },
 ];
+
+export function experimentsInScope(scope: DataScope): Experiment[] {
+  return experiments.filter((experiment) => {
+    if (scope.accountId !== ALL_ACCOUNTS && experiment.accountId !== scope.accountId) {
+      return false;
+    }
+    if (scope.platform !== "all" && experiment.platform !== scope.platform) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function reportsInScope(scope: DataScope): Report[] {
+  return reports.filter((report) => {
+    if (scope.accountId === ALL_ACCOUNTS) return true;
+    return report.accountId === null || report.accountId === scope.accountId;
+  });
+}

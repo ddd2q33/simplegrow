@@ -59,6 +59,27 @@ async function mockLatency() {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * The backend is being built module by module. While some routes are not
+ * implemented yet they answer 404, so a live request falls back to its fixture
+ * instead of blanking the page. Remove this once every route exists.
+ */
+async function withFallback<T>(
+  path: string,
+  mock: () => T | Promise<T>,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      await mockLatency();
+      return mock();
+    }
+    throw error;
+  }
+}
+
 /** Read through the API. Serves fixtures while `USE_MOCK` is on. */
 export async function query<T>(
   path: string,
@@ -69,7 +90,7 @@ export async function query<T>(
     await mockLatency();
     return mock();
   }
-  return apiFetch<T>(path, init);
+  return withFallback(path, mock, () => apiFetch<T>(path, init));
 }
 
 /** Write through the API. Applies the fixture mutation while `USE_MOCK` is on. */
@@ -82,5 +103,5 @@ export async function mutate<T>(
     await mockLatency();
     return mock();
   }
-  return apiFetch<T>(path, init);
+  return withFallback(path, mock, () => apiFetch<T>(path, init));
 }

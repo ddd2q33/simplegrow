@@ -7,10 +7,12 @@ import { Bell, Check, LogOut, Search, User as UserIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
+import { AccountSwitcher } from "@/components/dashboard/account-switcher";
 import { logout, readStoredSession } from "@/services/auth";
 import { getNotifications } from "@/services/workspace";
 import { formatRelativeTime } from "@/lib/utils";
 import { FIXTURE_NOW } from "@/lib/mock/core";
+import { socialAccounts } from "@/lib/mock/accounts";
 import type { Notification, User } from "@/lib/types";
 
 function useClickOutside<T extends HTMLElement>(onOutside: () => void) {
@@ -58,6 +60,10 @@ export function Topbar({ workspaceName }: { workspaceName: string }) {
       <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary sm:inline-flex">
         Growth
       </span>
+
+      <div className="ml-3 hidden sm:block">
+        <AccountSwitcher />
+      </div>
 
       <div className="ml-auto flex items-center gap-1.5">
         <div className="relative hidden md:block">
@@ -118,6 +124,10 @@ export function Topbar({ workspaceName }: { workspaceName: string }) {
                   </li>
                 ))}
               </ul>
+              <div className="border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
+                {socialAccounts.filter((item) => item.connected).length} of{" "}
+                {socialAccounts.length} accounts syncing
+              </div>
             </div>
           ) : null}
         </div>

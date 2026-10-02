@@ -1,14 +1,24 @@
-import type { DateRangeKey } from "@/lib/types";
 import { query } from "@/lib/api";
+import type { DataScope, Insight } from "@/lib/types";
+import { ALL_ACCOUNTS } from "@/lib/types";
 import { buildAudienceOverview } from "@/lib/mock/audience";
-import { insights } from "@/lib/mock/insights";
+import { insightsInScope } from "@/lib/mock/insights";
 
-export function getAudienceOverview(range: DateRangeKey) {
-  return query(`/audience/overview?range=${range}`, () =>
-    buildAudienceOverview(range),
+function scopeParams(scope: DataScope): string {
+  const params = new URLSearchParams({ range: scope.range });
+  if (scope.accountId !== ALL_ACCOUNTS) params.set("account_id", scope.accountId);
+  if (scope.platform !== "all") params.set("platform", scope.platform);
+  return params.toString();
+}
+
+export function getAudienceOverview(scope: DataScope) {
+  return query(`/audience/overview?${scopeParams(scope)}`, () =>
+    buildAudienceOverview(scope),
   );
 }
 
-export function getInsights() {
-  return query("/insights", () => insights);
+export function getInsights(scope: DataScope) {
+  return query<Insight[]>(`/insights?${scopeParams(scope)}`, () =>
+    insightsInScope(scope),
+  );
 }

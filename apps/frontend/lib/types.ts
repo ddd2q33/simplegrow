@@ -10,7 +10,14 @@ export type MetricKey =
   | "views"
   | "clicks";
 
-export type ContentFormat = "reel" | "carousel" | "short" | "video" | "image" | "thread" | "story";
+export type ContentFormat =
+  | "reel"
+  | "carousel"
+  | "short"
+  | "video"
+  | "image"
+  | "thread"
+  | "story";
 
 export type ContentStatus = "published" | "scheduled" | "draft" | "needs_review";
 
@@ -18,7 +25,12 @@ export type ExperimentStatus = "running" | "completed" | "draft" | "paused";
 
 export type ReportStatus = "ready" | "generating" | "failed";
 
-export type InsightCategory = "audience" | "content" | "timing" | "cadence" | "conversion";
+export type InsightCategory =
+  | "audience"
+  | "content"
+  | "timing"
+  | "cadence"
+  | "conversion";
 
 export type Priority = "high" | "medium" | "low";
 
@@ -26,12 +38,23 @@ export type UserRole = "owner" | "admin" | "editor" | "viewer";
 
 export type PlanTier = "free" | "starter" | "growth" | "agency";
 
+export type AccountType = "business" | "creator" | "page" | "channel";
+
+export type AccountStatus = "active" | "syncing" | "error" | "disconnected";
+
+export type AccountId = string;
+export type AccountGroupId = string;
+
+/** Sentinel used by every scope-aware query to mean "no account filter". */
+export const ALL_ACCOUNTS = "all" as const;
+
 export interface Workspace {
   id: string;
   name: string;
   slug: string;
   plan: PlanTier;
   timezone: string;
+  accountLimit: number;
   createdAt: string;
 }
 
@@ -46,19 +69,51 @@ export interface User {
   createdAt: string;
 }
 
+/** A workspace can hold many accounts, grouped by brand, client or region. */
+export interface AccountGroup {
+  id: AccountGroupId;
+  name: string;
+  description: string;
+  color: string;
+}
+
 export interface SocialAccount {
-  id: string;
+  id: AccountId;
   platform: Platform;
+  groupId: AccountGroupId;
+  accountType: AccountType;
   handle: string;
   displayName: string;
   avatarUrl: string | null;
   connected: boolean;
-  status: "active" | "syncing" | "error" | "disconnected";
+  status: AccountStatus;
   followers: number;
+  followersChangePct: number;
   connectedAt: string;
   lastSyncAt: string;
   scopes: string[];
 }
+
+/** Lightweight account projection embedded in rows and insights. */
+export interface AccountRef {
+  id: AccountId;
+  platform: Platform;
+  groupId: AccountGroupId;
+  handle: string;
+  displayName: string;
+}
+
+export interface DataScope {
+  range: DateRangeKey;
+  accountId: AccountId | typeof ALL_ACCOUNTS;
+  platform: Platform | "all";
+}
+
+export const DEFAULT_SCOPE: DataScope = {
+  range: "30d",
+  accountId: ALL_ACCOUNTS,
+  platform: "all",
+};
 
 export type MetricPoint = {
   date: string;
@@ -82,20 +137,50 @@ export interface PlatformBreakdown {
   followers: number;
   followersChangePct: number;
   reach: number;
+  impressions: number;
+  engagementRate: number;
+  sharePct: number;
+  accountCount: number;
+}
+
+export interface AccountBreakdown {
+  accountId: AccountId;
+  platform: Platform;
+  handle: string;
+  displayName: string;
+  followers: number;
+  followersChangePct: number;
+  reach: number;
+  views: number;
+  impressions: number;
   engagementRate: number;
   sharePct: number;
 }
 
 export interface DashboardOverview {
   range: DateRangeKey;
+  scopeLabel: string;
+  accountCount: number;
   kpis: Kpi[];
   followersSeries: MetricPoint[];
   engagementSeries: MetricPoint[];
+  reachSeries: MetricPoint[];
   reachByPlatform: PlatformBreakdown[];
+  accountBreakdown: AccountBreakdown[];
   topContent: ContentItem[];
   recentInsights: Insight[];
   recommendations: Recommendation[];
   activeExperiments: Experiment[];
+}
+
+export interface AnalyticsDetail {
+  range: DateRangeKey;
+  scopeLabel: string;
+  platforms: PlatformBreakdown[];
+  accounts: AccountBreakdown[];
+  reachSeries: MetricPoint[];
+  viewsSeries: MetricPoint[];
+  engagementSeries: MetricPoint[];
 }
 
 export interface ContentMetrics {
@@ -113,6 +198,7 @@ export interface ContentMetrics {
 
 export interface ContentItem {
   id: string;
+  accountId: AccountId;
   platform: Platform;
   format: ContentFormat;
   title: string;
@@ -145,6 +231,8 @@ export interface AudienceActivityWindow {
 
 export interface AudienceOverview {
   range: DateRangeKey;
+  scopeLabel: string;
+  accountCount: number;
   totalFollowers: number;
   totalFollowersChangePct: number;
   newFollowers: number;
@@ -160,6 +248,7 @@ export interface AudienceOverview {
 
 export interface Insight {
   id: string;
+  accountId: AccountId | null;
   category: InsightCategory;
   title: string;
   detail: string;
@@ -171,6 +260,7 @@ export interface Insight {
 
 export interface Recommendation {
   id: string;
+  accountId: AccountId | null;
   title: string;
   detail: string;
   category: InsightCategory;
@@ -193,6 +283,7 @@ export interface ExperimentVariant {
 
 export interface Experiment {
   id: string;
+  accountId: AccountId;
   name: string;
   hypothesis: string;
   platform: Platform;
@@ -208,6 +299,7 @@ export interface Experiment {
 
 export interface Report {
   id: string;
+  accountId: AccountId | null;
   name: string;
   periodStart: string;
   periodEnd: string;
@@ -227,24 +319,6 @@ export interface ActivityEvent {
   createdAt: string;
 }
 
-export interface AnalyticsPlatformRow {
-  platform: Platform;
-  followers: number;
-  followersChangePct: number;
-  reach: number;
-  impressions: number;
-  engagementRate: number;
-  sharePct: number;
-}
-
-export interface AnalyticsDetail {
-  range: DateRangeKey;
-  platforms: AnalyticsPlatformRow[];
-  reachSeries: MetricPoint[];
-  viewsSeries: MetricPoint[];
-  engagementSeries: MetricPoint[];
-}
-
 export interface Notification {
   id: string;
   title: string;
@@ -252,4 +326,57 @@ export interface Notification {
   createdAt: string;
   read: boolean;
   kind: "insight" | "experiment" | "report" | "system";
+}
+
+/** How a composed post reaches the networks. */
+export type PostMode = "now" | "schedule" | "draft";
+
+export type ScheduledPostStatus =
+  | "draft"
+  | "scheduled"
+  | "publishing"
+  | "published"
+  | "partial"
+  | "failed";
+
+export interface ScheduledPostTarget {
+  platform: Platform;
+  account_id: string;
+  handle: string;
+  external_id: string | null;
+}
+
+export interface ScheduledPostResult {
+  platform: Platform;
+  account_id: string | null;
+  status: string | null;
+  url: string | null;
+  error: string | null;
+}
+
+/** A row in the local publishing queue, backed by `POST/GET /social/posts`. */
+export interface ScheduledPost {
+  id: string;
+  workspaceId: string;
+  content: string;
+  mode: PostMode;
+  status: ScheduledPostStatus;
+  accountIds: string[];
+  targets: ScheduledPostTarget[];
+  results: ScheduledPostResult[];
+  scheduledFor: string | null;
+  timezone: string;
+  externalPostId: string | null;
+  platformPostUrl: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ComposePostInput {
+  content: string;
+  accountIds: string[];
+  mode: PostMode;
+  scheduledFor?: string | null;
+  timezone?: string;
 }

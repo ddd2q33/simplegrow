@@ -2,26 +2,42 @@
 
 import { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
-import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { RangePicker } from "@/components/dashboard/filters";
 import { ChartFrame } from "@/components/charts/chart-frame";
 import { TrendAreaChart } from "@/components/charts/trend-area-chart";
 import { ComparisonBarChart } from "@/components/charts/comparison-bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
 import { ActivityHeatmap } from "@/components/charts/activity-heatmap";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { DeltaBadge } from "@/components/dashboard/kpi-card";
-import { useRangeData } from "@/hooks/use-range-data";
+import { useScopedData } from "@/hooks/use-scoped-data";
+import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import { getAudienceOverview } from "@/services/audience";
 import { downloadCsv } from "@/lib/export";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/utils";
-import type { AudienceActivityWindow, AudienceOverview } from "@/lib/types";
+import type {
+  AudienceActivityWindow,
+  AudienceOverview,
+  AudienceSegment,
+  DataScope,
+} from "@/lib/types";
 
-export function AudienceView({ initial }: { initial: AudienceOverview }) {
-  const { data, loading, error } = useRangeData(getAudienceOverview, initial);
+export function AudienceView({
+  initial,
+  initialScope,
+}: {
+  initial: AudienceOverview;
+  initialScope: DataScope;
+}) {
+  const { data, loading, error, scope } = useScopedData(
+    getAudienceOverview,
+    initial,
+    initialScope,
+  );
   const [selected, setSelected] = useState<AudienceActivityWindow | null>(null);
 
   function exportSegments() {
@@ -60,6 +76,12 @@ export function AudienceView({ initial }: { initial: AudienceOverview }) {
       />
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      <ScopeBanner
+        scope={scope}
+        accountCount={data.accountCount}
+        totalFollowers={data.totalFollowers}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Tile
@@ -103,43 +125,19 @@ export function AudienceView({ initial }: { initial: AudienceOverview }) {
       </ChartFrame>
 
       <div className="flex flex-col gap-4">
-        <SectionHeader
-          title="Audience segments"
-          description="Grouped by engagement recency"
-        />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {data.segments.map((segment) => (
-            <Card key={segment.id} className="p-5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold">{segment.name}</p>
-                <DeltaBadge changePct={segment.growthPct} size="sm" />
-              </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                {segment.description}
-              </p>
-
-              <p className="mt-3 text-xl font-semibold tabular-nums">
-                {formatCompact(segment.size)}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {formatPercent(segment.sharePct, 1)} of audience
-              </p>
-
-              <Progress value={segment.sharePct * 2.5} className="mt-3" />
-
-              <dl className="mt-3 flex items-center justify-between text-[11px]">
-                <dt className="text-muted-foreground">Engagement</dt>
-                <dd className="font-medium tabular-nums">
-                  {formatPercent(segment.engagementRate, 2)}
-                </dd>
-              </dl>
-              <dl className="mt-1 flex items-center justify-between text-[11px]">
-                <dt className="text-muted-foreground">Median age</dt>
-                <dd className="font-medium tabular-nums">{segment.avgAge}</dd>
-              </dl>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Audience segments</CardTitle>
+            <CardDescription>Grouped by engagement recency</CardDescription>
+          </CardHeader>
+          <div className="p-5 pt-0">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {data.segments.map((segment) => (
+                <SegmentTile key={segment.id} segment={segment} />
+              ))}
+            </div>
+          </div>
+        </Card>
       </div>
 
       <ChartFrame
@@ -184,7 +182,9 @@ export function AudienceView({ initial }: { initial: AudienceOverview }) {
           </ChartFrame>
 
           <Card className="p-5">
-            <SectionHeader title="Demographics" />
+            <CardHeader>
+              <CardTitle>Demographics</CardTitle>
+            </CardHeader>
             <dl className="mt-4 flex flex-col gap-3 text-xs">
               <Row label="Median age" value={String(data.medianAge)} />
               <Row
@@ -206,9 +206,10 @@ export function AudienceView({ initial }: { initial: AudienceOverview }) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="border-b border-border p-5 pb-4">
-          <SectionHeader title="Countries" description="Absolute follower counts" />
-        </div>
+        <CardHeader>
+          <CardTitle>Countries</CardTitle>
+          <CardDescription>Absolute follower counts</CardDescription>
+        </CardHeader>
         <ul className="divide-y divide-border">
           {data.topCountries.map((country) => (
             <li key={country.code} className="flex items-center gap-4 px-5 py-3">
@@ -232,6 +233,37 @@ export function AudienceView({ initial }: { initial: AudienceOverview }) {
         </ul>
       </Card>
     </div>
+  );
+}
+
+function SegmentTile({ segment }: { segment: AudienceSegment }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold">{segment.name}</p>
+        <DeltaBadge changePct={segment.growthPct} size="sm" />
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        {segment.description}
+      </p>
+      <p className="mt-3 text-xl font-semibold tabular-nums">
+        {formatCompact(segment.size)}
+      </p>
+      <p className="text-[11px] text-muted-foreground">
+        {formatPercent(segment.sharePct, 1)} of audience
+      </p>
+      <Progress value={segment.sharePct * 2.5} className="mt-3" />
+      <dl className="mt-3 flex items-center justify-between text-[11px]">
+        <dt className="text-muted-foreground">Engagement</dt>
+        <dd className="font-medium tabular-nums">
+          {formatPercent(segment.engagementRate, 2)}
+        </dd>
+      </dl>
+      <dl className="mt-1 flex items-center justify-between text-[11px]">
+        <dt className="text-muted-foreground">Median age</dt>
+        <dd className="font-medium tabular-nums">{segment.avgAge}</dd>
+      </dl>
+    </Card>
   );
 }
 

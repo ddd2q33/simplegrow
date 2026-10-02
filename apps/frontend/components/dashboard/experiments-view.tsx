@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pause, Play, Plus, Sparkles, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card } from "@/components/ui/card";
@@ -11,13 +11,24 @@ import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
+import { useDashboardFilters } from "@/components/dashboard/filters";
+import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import {
   createExperiment,
+  getExperiments,
   updateExperimentStatus,
 } from "@/services/experiments";
 import type { ExperimentInput } from "@/services/experiments";
+import { accountGroups, getAccount, socialAccounts } from "@/lib/mock/accounts";
 import { formatNumber, formatPercent, formatShortDate } from "@/lib/utils";
-import type { Experiment, ExperimentStatus, Platform } from "@/lib/types";
+import { ALL_ACCOUNTS } from "@/lib/types";
+import type {
+  AccountId,
+  Experiment,
+  ExperimentStatus,
+  Platform,
+  SocialAccount,
+} from "@/lib/types";
 
 const STATUS_VARIANT: Record<
   ExperimentStatus,
@@ -38,6 +49,7 @@ const FILTERS: { key: ExperimentStatus | "all"; label: string }[] = [
 ];
 
 export function ExperimentsView({ initial }: { initial: Experiment[] }) {
+  const { scope } = useDashboardFilters();
   const [experiments, setExperiments] = useState(initial);
   const [filter, setFilter] = useState<ExperimentStatus | "all">("all");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -51,6 +63,31 @@ export function ExperimentsView({ initial }: { initial: Experiment[] }) {
         : experiments.filter((item) => item.status === filter),
     [experiments, filter],
   );
+
+  // A narrow scope implies the experiment belongs to that account.
+  const defaultAccountId: AccountId =
+    scope.accountId === ALL_ACCOUNTS
+      ? (socialAccounts.find((account) => account.connected)?.id ?? "acc_ig_main")
+      : scope.accountId;
+
+  const scopedAccounts = socialAccounts.filter(
+    (account) =>
+      account.connected &&
+      (scope.accountId === ALL_ACCOUNTS || account.id === scope.accountId) &&
+      (scope.platform === "all" || account.platform === scope.platform),
+  );
+
+  // The page ships with a default-scope payload; refetch whenever the
+  // global scope narrows or widens so the table always matches the banner.
+  useEffect(() => {
+    let active = true;
+    getExperiments(scope).then((rows) => {
+      if (active) setExperiments(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [scope]);
 
   async function changeStatus(id: string, status: ExperimentStatus) {
     setPendingId(id);
@@ -85,6 +122,15 @@ export function ExperimentsView({ initial }: { initial: Experiment[] }) {
             New experiment
           </Button>
         }
+      />
+
+      <ScopeBanner
+        scope={scope}
+        accountCount={scopedAccounts.length}
+        totalFollowers={scopedAccounts.reduce(
+          (sum, account) => sum + account.followers,
+          0,
+        )}
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -145,6 +191,8 @@ export function ExperimentsView({ initial }: { initial: Experiment[] }) {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreate={onCreate}
+        accounts={scopedAccounts}
+        defaultAccountId={defaultAccountId}
       />
     </div>
   );
@@ -173,6 +221,9 @@ function ExperimentCard({
               {experiment.status}
             </Badge>
           </div>
+          <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
+            {getAccount(experiment.accountId)?.handle ?? "—"}
+          </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
             {experiment.hypothesis}
           </p>
@@ -280,22 +331,44 @@ function CreateExperimentDialog({
   open,
   onClose,
   onCreate,
+  accounts,
+  defaultAccountId,
 }: {
   open: boolean;
   onClose: () => void;
   onCreate: (input: ExperimentInput) => Promise<void>;
+  accounts: SocialAccount[];
+  defaultAccountId: AccountId;
 }) {
-  const [form, setForm] = useState<ExperimentInput>({
-    name: "",
-    hypothesis: "",
-    platform: "instagram",
-    primaryMetric: "Engagement rate",
-  });
+  const emptyForm = useMemo<ExperimentInput>(
+    () => ({
+      accountId: defaultAccountId,
+      name: "",
+      hypothesis: "",
+      platform: accounts[0]?.platform ?? "instagram",
+      primaryMetric: "Engagement rate",
+    }),
+    [defaultAccountId, accounts],
+  );
+
+  const [form, setForm] = useState<ExperimentInput>(emptyForm);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (open) setForm(emptyForm);
+  }, [open, emptyForm]);
+
   function update<K extends keyof ExperimentInput>(key: K, value: ExperimentInput[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      // Platform is derived from the account to keep the pair consistent.
+      if (key === "accountId") {
+        const account = accounts.find((item) => item.id === value);
+        if (account) next.platform = account.platform;
+      }
+      return next;
+    });
   }
 
   async function submit() {
@@ -313,7 +386,7 @@ function CreateExperimentDialog({
     setPending(true);
     try {
       await onCreate(form);
-      setForm({ name: "", hypothesis: "", platform: "instagram", primaryMetric: "Engagement rate" });
+      setForm(emptyForm);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not create experiment");
     } finally {
@@ -369,6 +442,29 @@ function CreateExperimentDialog({
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Account">
+            <Select
+              value={form.accountId}
+              onChange={(event) => update("accountId", event.target.value)}
+            >
+              {accountGroups.map((group) => {
+                const members = accounts.filter(
+                  (account) => account.groupId === group.id,
+                );
+                if (members.length === 0) return null;
+                return (
+                  <optgroup key={group.id} label={group.name}>
+                    {members.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.handle}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+            </Select>
+          </Field>
+
           <Field label="Platform">
             <Select
               value={form.platform}
@@ -381,7 +477,9 @@ function CreateExperimentDialog({
               <option value="facebook">Facebook</option>
             </Select>
           </Field>
+        </div>
 
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Primary metric">
             <Select
               value={form.primaryMetric}

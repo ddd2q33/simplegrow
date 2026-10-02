@@ -2,25 +2,37 @@
 
 import { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
-import { PageHeader, SectionHeader } from "@/components/dashboard/page-header";
+import { PageHeader } from "@/components/dashboard/page-header";
 import { RangePicker, PlatformFilter } from "@/components/dashboard/filters";
 import { ChartFrame } from "@/components/charts/chart-frame";
 import { TrendAreaChart } from "@/components/charts/trend-area-chart";
 import { ComparisonBarChart } from "@/components/charts/comparison-bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { PlatformBadge } from "@/components/dashboard/platform-badge";
 import { DeltaBadge } from "@/components/dashboard/kpi-card";
-import { useRangeData } from "@/hooks/use-range-data";
+import { useScopedData } from "@/hooks/use-scoped-data";
+import { ScopeBanner } from "@/components/dashboard/scope-banner";
+import { AccountBreakdownTable } from "@/components/dashboard/account-breakdown-table";
 import { getAnalyticsDetail } from "@/services/analytics";
 import { downloadCsv } from "@/lib/export";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/utils";
-import type { AnalyticsDetail } from "@/lib/types";
+import type { AnalyticsDetail, DataScope } from "@/lib/types";
 
-export function AnalyticsView({ initial }: { initial: AnalyticsDetail }) {
-  const { data, loading, error } = useRangeData(getAnalyticsDetail, initial);
+export function AnalyticsView({
+  initial,
+  initialScope,
+}: {
+  initial: AnalyticsDetail;
+  initialScope: DataScope;
+}) {
+  const { data, loading, error, scope } = useScopedData(
+    getAnalyticsDetail,
+    initial,
+    initialScope,
+  );
   const [metric, setMetric] = useState<"reach" | "views">("reach");
 
   const series =
@@ -40,7 +52,8 @@ export function AnalyticsView({ initial }: { initial: AnalyticsDetail }) {
   function exportRows() {
     downloadCsv(
       `simplegrow-analytics-${data.range}.csv`,
-      data.platforms.map((row) => ({
+      data.accounts.map((row) => ({
+        account: row.handle,
         platform: row.platform,
         followers: row.followers,
         reach: row.reach,
@@ -69,6 +82,12 @@ export function AnalyticsView({ initial }: { initial: AnalyticsDetail }) {
       />
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      <ScopeBanner
+        scope={scope}
+        accountCount={data.accounts.length}
+        totalFollowers={totals.followers}
+      />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryTile label="Total reach" value={formatCompact(totals.reach)} />
@@ -154,16 +173,17 @@ export function AnalyticsView({ initial }: { initial: AnalyticsDetail }) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="border-b border-border p-5 pb-4">
-          <SectionHeader
-            title="Channel breakdown"
-            description={`Metrics for the last ${data.range === "7d" ? "7" : data.range === "30d" ? "30" : "90"} days`}
-          />
-        </div>
+        <CardHeader className="!p-0 !pb-0">
+          <CardTitle>Channel breakdown</CardTitle>
+          <CardDescription>
+            Metrics for the last {data.range === "7d" ? "7" : data.range === "30d" ? "30" : "90"} days
+          </CardDescription>
+        </CardHeader>
         <Table>
           <THead>
             <TR>
               <TH>Platform</TH>
+              <TH className="text-right">Accounts</TH>
               <TH className="text-right">Followers</TH>
               <TH className="text-right">Δ Followers</TH>
               <TH className="text-right">Reach</TH>
@@ -177,6 +197,7 @@ export function AnalyticsView({ initial }: { initial: AnalyticsDetail }) {
                 <TD>
                   <PlatformBadge platform={row.platform} showLabel />
                 </TD>
+                <TD className="text-right tabular-nums">{row.accountCount}</TD>
                 <TD className="text-right tabular-nums">
                   {row.followers === 0 ? "—" : formatNumber(row.followers)}
                 </TD>
@@ -203,6 +224,12 @@ export function AnalyticsView({ initial }: { initial: AnalyticsDetail }) {
           </TBody>
         </Table>
       </Card>
+
+      <AccountBreakdownTable
+        rows={data.accounts}
+        title="Account breakdown"
+        description="Ranked by reach within the current scope"
+      />
     </div>
   );
 }

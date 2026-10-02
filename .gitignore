@@ -3,11 +3,16 @@ node_modules/
 out/
 dist/
 build/
+*.tsbuildinfo
 
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+*.db
+*.db-journal
+*.sqlite3
 
 .env
 .env.local
